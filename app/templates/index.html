@@ -1,103 +1,51 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CineFlow | Movie Theater Management</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
-  </head>
-  <body>
-    <main class="layout">
-      <header class="topbar card">
-        <div class="brand">
-          <span class="brand-mark">CF</span>
-          <div>
-            <h2>CineFlow Admin Suite</h2>
-            <p>Centralized operations for your movie theater business</p>
-          </div>
-        </div>
-        <div class="topbar-status">
-          <span class="status-dot"></span>
-          <span>Live Connected Database</span>
-        </div>
-      </header>
-
+{% extends "base.html" %}
+{% block content %}
       <section class="hero card">
         <div>
-          <p class="eyebrow">Cinema Operations Dashboard</p>
-          <h1>CineFlow Movie Theater Management</h1>
+          <p class="eyebrow">Cinema Operations</p>
+          <h1>Performance at a glance</h1>
           <p>
-            Manage films, showings, customer bookings, and concession sales with a smooth production-ready interface.
+            Track showings, revenue, and recent orders. Use <strong>New order</strong> to sell tickets and print a receipt.
           </p>
         </div>
-        <div class="film-orb" aria-hidden="true">CINEMA</div>
+        <div class="film-orb" aria-hidden="true">LIVE</div>
       </section>
 
       <section class="stats-grid">
         <article class="stat card">
-          <p>Total Films</p>
+          <p>Total films</p>
           <h2 id="totalFilms">0</h2>
         </article>
         <article class="stat card">
-          <p>Active Showings</p>
+          <p>Active showings</p>
           <h2 id="activeShowings">0</h2>
         </article>
         <article class="stat card">
-          <p>Open Theatres</p>
+          <p>Open theatres</p>
           <h2 id="openTheatres">0</h2>
         </article>
         <article class="stat card">
-          <p>Total Revenue</p>
+          <p>Total revenue</p>
           <h2 id="totalRevenue">$0</h2>
         </article>
       </section>
 
-      <section class="content-grid">
+      <section class="content-grid one-col-tight">
         <article class="card">
           <div class="section-title-row">
-            <h3>Now Showing</h3>
-            <span class="badge">Synced with local DB</span>
+            <h3>Now showing</h3>
+            <a class="badge badge-link" href="{{ url_for('order_page') }}">Create order</a>
           </div>
-          <p class="section-subtitle">Live schedule and seat availability across active theatres.</p>
+          <p class="section-subtitle">Upcoming showtimes and available seats.</p>
           <div id="showingsContainer" class="showing-list"></div>
-        </article>
-
-        <article class="card">
-          <h3>Create Ticket Order</h3>
-          <form id="orderForm">
-            <label>
-              Customer
-              <select id="customerSelect" required></select>
-            </label>
-            <label>
-              Showing
-              <select id="showingSelect" required></select>
-            </label>
-            <label>
-              Ticket Quantity
-              <input id="ticketQtyInput" type="number" min="1" max="12" value="1" required />
-            </label>
-            <fieldset>
-              <legend>Add Concessions (optional)</legend>
-              <div id="concessionsContainer" class="concession-list"></div>
-            </fieldset>
-            <button type="submit">Create Order</button>
-            <p id="formFeedback" class="feedback"></p>
-          </form>
         </article>
       </section>
 
       <section class="card">
         <div class="section-title-row">
-          <h3>Recent Orders</h3>
+          <h3>Recent orders</h3>
         </div>
-        <p class="section-subtitle">Latest transactions processed by your booking workflow.</p>
+        <p class="section-subtitle">Latest transactions (subtotal, tax, discounts, total).</p>
         <div class="table-wrap">
           <table>
             <thead>
@@ -106,45 +54,14 @@
                 <th>Customer</th>
                 <th>Tickets</th>
                 <th>Total</th>
-                <th>Created At</th>
+                <th>Created</th>
               </tr>
             </thead>
             <tbody id="ordersBody"></tbody>
           </table>
         </div>
       </section>
-
-      <section class="card">
-        <div class="section-title-row">
-          <h3>Management Data Explorer</h3>
-          <span class="badge">Full backend visibility</span>
-        </div>
-        <p class="section-subtitle">Inspect every core table and business metric in one place.</p>
-        <label>
-          Data Set
-          <select id="datasetSelect">
-            <option value="customers">Customers</option>
-            <option value="employees">Employees</option>
-            <option value="shifts">Shifts</option>
-            <option value="films">Films</option>
-            <option value="theatres">Theatres</option>
-            <option value="showings">Showings</option>
-            <option value="orders">Orders</option>
-            <option value="tickets">Tickets</option>
-            <option value="concessions">Concessions</option>
-            <option value="topFilms">Top Films by Tickets</option>
-            <option value="concessionSales">Concession Sales</option>
-          </select>
-        </label>
-        <div class="table-wrap">
-          <table>
-            <thead id="datasetHead"></thead>
-            <tbody id="datasetBody"></tbody>
-          </table>
-        </div>
-      </section>
-    </main>
-
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
-  </body>
-</html>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+{% endblock %}

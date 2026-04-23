@@ -1,58 +1,42 @@
 # CineFlow Movie Theater Web App
 
-This project now includes a complete starter web app for movie theater operations:
+Flask + SQLite application for movie theater operations aligned with the final database model in `cinema_final.sql` (SQL Server reference script). The app uses a **translated SQLite schema** and the same sample data (Section 3) as that script.
 
-- Beautiful, responsive operations dashboard
-- Showings, films, customer booking, and recent order views
-- Create ticket orders with optional concessions
-- Local SQLite database for persistent storage
-- Flask backend API
+## Features
 
-## Run Locally
+- **Multi-page UI**: Dashboard, New order, Customers, Data explorer (shared navigation in `app/templates/base.html`).
+- **Point of sale**: Book showings, optional concessions, automatic seat updates.
+- **Pricing**: 8% tax on pre-discount subtotal; **rewards members** get **10% off** the pre-tax subtotal on new app orders (stored in `orders.discount`).
+- **Receipts**: After checkout, the browser opens a printable receipt (`/receipt/<order_number>`).
+- **Quick add customer**: Name, email, rewards flag — creates the next `C0XX` id.
+- **Management data**: API exposes full table views and aggregates (top films, concession units).
 
-1. Create and activate a virtual environment:
+## SQL scripts
 
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
+- **`cinema_final.sql`**: Authoritative **SQL Server** script (UP/DOWN, final `orders` with subtotal/tax/discount/total, no concession stock, `shift_department_id` NOT NULL, `home_city` on customers). Use for class submission in SSMS.
+- **`app/movie_theater.db`**: **SQLite** database created at runtime with equivalent structure and seed (see `seed_data.py` + `init_db()` in `app.py`).
+
+## Run locally
+
+1. Create and activate a virtual environment (optional).
 
 2. Install dependencies:
 
 ```powershell
-pip install -r requirements.txt
+py -m pip install -r requirements.txt
 ```
 
 3. Start the app:
 
 ```powershell
-python app.py
+py app.py
 ```
 
-4. Open:
+4. Open `http://127.0.0.1:5000`
 
-`http://127.0.0.1:5000`
-
-## Local Database
-
-- The SQLite database file is created automatically at `app/movie_theater.db`.
-- The seed data follows your `cinema_up.sql` model (customers, films, showings, theatres, concessions, orders, tickets).
+On first run with **schema version 2**, the app may reset an older SQLite file and reseed from `cinema_final` data. To force a clean database, delete `app/movie_theater.db` and restart.
 
 ## Deploy on Vercel
 
-This repo is configured for Vercel with:
-
-- `api/index.py` as the serverless entrypoint
-- `vercel.json` routing all requests to Flask
-
-### Steps
-
-1. Push this project to GitHub.
-2. In Vercel, import the GitHub repository.
-3. Keep default build settings and deploy.
-
-### Important note about database on Vercel
-
-The app uses SQLite. On Vercel, SQLite runs in an ephemeral serverless filesystem (`/tmp`) and does not persist long-term across cold starts.
-
-For production persistent data, use a hosted database (Neon Postgres, Supabase, PlanetScale, etc.) and switch the Flask DB layer accordingly.
+- `api/index.py` is the serverless entrypoint; `vercel.json` routes traffic to Flask.
+- SQLite on Vercel uses `/tmp` and is **ephemeral**; cold starts re-run `init_db()` and reseed. For production persistence, use a hosted database.

@@ -1,16 +1,38 @@
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
+from seed_data import (
+    SEED_ORDER_CONCESSIONS,
+    SEED_ORDER_SOURCE,
+    SEED_CUSTOMERS,
+    SEED_CONCESSIONS,
+    SEED_DEPARTMENT,
+    SEED_EMPLOYEES,
+    SEED_FILMS,
+    SEED_SHOWINGS,
+    SEED_SHIFTS,
+    SEED_SUPERVISORS,
+    SEED_THEATRES,
+    SEED_TICKETS,
+    compute_order_totals,
+    create_tables_sql,
+    drop_all_sql,
+    REWARDS_DISCOUNT_RATE,
+    TICKET_UNIT_PRICE,
+)
+
 BASE_DIR = Path(__file__).resolve().parent
 APP_DIR = BASE_DIR / "app"
 DB_PATH = Path("/tmp/movie_theater.db") if os.getenv("VERCEL") else APP_DIR / "movie_theater.db"
-TICKET_PRICE = 12.0
+
+SCHEMA_VERSION = 2
 
 app = Flask(
     __name__,
@@ -30,261 +52,158 @@ def table_count(conn: sqlite3.Connection, table_name: str) -> int:
     return int(conn.execute(f"SELECT COUNT(*) AS count FROM {table_name}").fetchone()["count"])
 
 
+def _apply_schema_and_seed(conn: sqlite3.Connection) -> None:
+    conn.executescript(create_tables_sql())
+    conn.executescript(SEED_DEPARTMENT)
+    conn.executescript(SEED_SUPERVISORS)
+    conn.executescript(SEED_EMPLOYEES)
+    conn.executescript(SEED_CUSTOMERS)
+    conn.executescript(SEED_THEATRES)
+    conn.executescript(SEED_FILMS)
+    conn.executescript(SEED_CONCESSIONS)
+    conn.executescript(SEED_SHOWINGS)
+    created_ts = "2026-04-17T18:00:00"
+    for order_num, cust_id, subtotal, discount in SEED_ORDER_SOURCE:
+        tax, total = compute_order_totals(subtotal, discount)
+        conn.execute(
+            """
+            INSERT INTO orders (order_number, order_customer_id, subtotal, tax, discount, total, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (order_num, cust_id, subtotal, tax, discount, total, created_ts),
+        )
+    conn.executescript(SEED_TICKETS)
+    conn.executescript(SEED_ORDER_CONCESSIONS)
+    conn.executescript(SEED_SHIFTS)
+    conn.commit()
+
+
 def init_db() -> None:
     APP_DIR.mkdir(parents=True, exist_ok=True)
     with get_connection() as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS department_lookup (
-                department_id INTEGER PRIMARY KEY,
-                department_name TEXT NOT NULL
-            );
+        current = conn.execute("PRAGMA user_version").fetchone()[0]
+        if current < SCHEMA_VERSION:
+            conn.executescript(drop_all_sql())
+            _apply_schema_and_seed(conn)
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            conn.commit()
+        else:
+            conn.executescript(create_tables_sql())
+            conn.commit()
 
-            CREATE TABLE IF NOT EXISTS supervisors (
-                supervisor_id INTEGER PRIMARY KEY,
-                firstname TEXT NOT NULL,
-                lastname TEXT NOT NULL,
-                department_id INTEGER NOT NULL,
-                FOREIGN KEY (department_id) REFERENCES department_lookup(department_id)
-            );
 
-            CREATE TABLE IF NOT EXISTS employees (
-                employee_id TEXT PRIMARY KEY,
-                firstname TEXT NOT NULL,
-                lastname TEXT NOT NULL,
-                email TEXT NOT NULL,
-                job_title TEXT NOT NULL,
-                status TEXT NOT NULL,
-                supervisor_id INTEGER,
-                department_id INTEGER NOT NULL,
-                FOREIGN KEY (supervisor_id) REFERENCES supervisors(supervisor_id),
-                FOREIGN KEY (department_id) REFERENCES department_lookup(department_id)
-            );
+def next_customer_id(conn: sqlite3.Connection) -> str:
+    rows = conn.execute("SELECT customer_id FROM customers").fetchall()
+    max_n = 0
+    for row in rows:
+        m = re.match(r"^C(\d+)$", row["customer_id"] or "")
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+    return f"C{max_n + 1:03d}"
 
-            CREATE TABLE IF NOT EXISTS customers (
-                customer_id TEXT PRIMARY KEY,
-                firstname TEXT NOT NULL,
-                lastname TEXT NOT NULL,
-                email TEXT NOT NULL,
-                pref_pymt_method TEXT,
-                rewards_member INTEGER NOT NULL DEFAULT 0
-            );
 
-            CREATE TABLE IF NOT EXISTS theatres (
-                theatre_number INTEGER PRIMARY KEY,
-                theatre_seat_count INTEGER NOT NULL,
-                accessible_seating INTEGER NOT NULL DEFAULT 0,
-                status INTEGER NOT NULL DEFAULT 1,
-                status_notes TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS films (
-                film_id INTEGER PRIMARY KEY,
-                film_title TEXT NOT NULL,
-                film_rating TEXT NOT NULL,
-                film_length_minutes INTEGER NOT NULL,
-                film_language TEXT NOT NULL DEFAULT 'English',
-                film_last_showing_date TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS showings (
-                showing_id INTEGER PRIMARY KEY,
-                film_id INTEGER NOT NULL,
-                film_theatre_number INTEGER NOT NULL,
-                film_showing_datetime TEXT NOT NULL,
-                film_available_seats INTEGER NOT NULL,
-                FOREIGN KEY (film_id) REFERENCES films (film_id),
-                FOREIGN KEY (film_theatre_number) REFERENCES theatres (theatre_number)
-            );
-
-            CREATE TABLE IF NOT EXISTS orders (
-                order_number INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_customer_id TEXT NOT NULL,
-                order_total REAL NOT NULL DEFAULT 0.0,
-                order_discount REAL NOT NULL DEFAULT 0.0,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (order_customer_id) REFERENCES customers (customer_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS tickets (
-                ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_customer_id TEXT NOT NULL,
-                ticket_showing_id INTEGER NOT NULL,
-                ticket_order_number INTEGER NOT NULL,
-                FOREIGN KEY (ticket_customer_id) REFERENCES customers (customer_id),
-                FOREIGN KEY (ticket_showing_id) REFERENCES showings (showing_id),
-                FOREIGN KEY (ticket_order_number) REFERENCES orders (order_number)
-            );
-
-            CREATE TABLE IF NOT EXISTS shifts (
-                shift_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                employee_id TEXT NOT NULL,
-                showing_id INTEGER,
-                shift_start_datetime TEXT NOT NULL,
-                shift_end_datetime TEXT NOT NULL,
-                shift_department_id INTEGER,
-                FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
-                FOREIGN KEY (showing_id) REFERENCES showings(showing_id),
-                FOREIGN KEY (shift_department_id) REFERENCES department_lookup(department_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS concessions (
-                concession_id TEXT PRIMARY KEY,
-                concession_name TEXT NOT NULL,
-                concession_size TEXT,
-                concession_type TEXT,
-                concession_price REAL NOT NULL,
-                stock INTEGER NOT NULL DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS order_concessions (
-                order_number INTEGER NOT NULL,
-                concession_id TEXT NOT NULL,
-                quantity INTEGER NOT NULL DEFAULT 1,
-                PRIMARY KEY (order_number, concession_id),
-                FOREIGN KEY (order_number) REFERENCES orders (order_number),
-                FOREIGN KEY (concession_id) REFERENCES concessions (concession_id)
-            );
-            """
-        )
-
-        if table_count(conn, "department_lookup") == 0:
-            conn.executescript(
-                """
-                INSERT INTO department_lookup (department_id, department_name) VALUES
-                (1, 'Box Office'),
-                (2, 'Concessions'),
-                (3, 'Cleaning'),
-                (4, 'Projection'),
-                (5, 'Management');
-                """
-            )
-
-        if table_count(conn, "supervisors") == 0:
-            conn.executescript(
-                """
-                INSERT INTO supervisors (supervisor_id, firstname, lastname, department_id) VALUES
-                (1, 'Patricia', 'Olsen', 5),
-                (2, 'Marcus', 'Chen', 4),
-                (3, 'Elena', 'Rodriguez', 2),
-                (4, 'James', 'Whitaker', 1),
-                (5, 'Sonya', 'Patel', 3);
-                """
-            )
-
-        if table_count(conn, "employees") == 0:
-            conn.executescript(
-                """
-                INSERT INTO employees (employee_id, firstname, lastname, email, job_title, status, supervisor_id, department_id) VALUES
-                ('E01', 'Margo', 'Elia', 'margo.elia@mail.com', 'Usher', 'Full time', 4, 1),
-                ('E02', 'Orso', 'Bernardetta', 'orso.bernardetta@mail.com', 'Custodian', 'Part time', 5, 3),
-                ('E03', 'Teodora', 'De Luca', 'teodora.deluca@mail.com', 'Projection Assistant', 'Full time', 2, 4),
-                ('E04', 'Lisandro', 'Agresta', 'lisandro.agresta@mail.com', 'Box Office Associate', 'Full time', 4, 1),
-                ('E05', 'Mesut', 'Demirci', 'mesut.demirci@mail.com', 'Projectionist', 'Full time', 2, 4),
-                ('E06', 'Enis', 'Terzi', 'enis.terzi@mail.com', 'Concessions Associate', 'Part time', 3, 2);
-                """
-            )
-
-        if table_count(conn, "customers") == 0:
-            conn.executescript(
-                """
-                INSERT INTO customers (customer_id, firstname, lastname, email, pref_pymt_method, rewards_member) VALUES
-                ('C001', 'Ethan', 'Walker', 'ethan.walker@mail.com', 'Card', 1),
-                ('C002', 'Olivia', 'Harris', 'olivia.harris@mail.com', 'Apple Pay', 0),
-                ('C003', 'Noah', 'Clark', 'noah.clark@mail.com', 'Card', 1),
-                ('C004', 'Ava', 'Lewis', 'ava.lewis@mail.com', 'Cash', 0),
-                ('C005', 'Liam', 'Hall', 'liam.hall@mail.com', 'Card', 0);
-                """
-            )
-
-        if table_count(conn, "theatres") == 0:
-            conn.executescript(
-                """
-                INSERT INTO theatres (theatre_number, theatre_seat_count, accessible_seating, status, status_notes) VALUES
-                (1, 40, 1, 1, NULL),
-                (2, 40, 0, 0, 'Renovations scheduled for April-June'),
-                (3, 40, 0, 1, NULL),
-                (4, 56, 1, 1, NULL);
-                """
-            )
-
-        if table_count(conn, "films") == 0:
-            conn.executescript(
-                """
-                INSERT INTO films (film_id, film_title, film_rating, film_length_minutes, film_language, film_last_showing_date) VALUES
-                (1, 'Dune: Part Three', 'PG-13', 165, 'English', '2026-04-20'),
-                (2, 'Thunderbolts*', 'PG-13', 127, 'English', '2026-04-18'),
-                (3, 'How to Train Your Dragon', 'PG', 126, 'English', '2026-04-22'),
-                (4, 'Mission: Impossible - The Final Reckoning', 'PG-13', 169, 'English', '2026-04-23'),
-                (5, 'Elio', 'PG', 98, 'English', '2026-04-17');
-                """
-            )
-
-        if table_count(conn, "showings") == 0:
-            conn.executescript(
-                """
-                INSERT INTO showings (showing_id, film_id, film_theatre_number, film_showing_datetime, film_available_seats) VALUES
-                (1, 1, 1, '2026-04-15T18:00:00', 36),
-                (2, 2, 3, '2026-04-15T19:30:00', 31),
-                (3, 3, 4, '2026-04-15T20:10:00', 46),
-                (4, 4, 1, '2026-04-16T17:40:00', 38),
-                (5, 5, 3, '2026-04-16T21:00:00', 34);
-                """
-            )
-
-        if table_count(conn, "concessions") == 0:
-            conn.executescript(
-                """
-                INSERT INTO concessions (concession_id, concession_name, concession_size, concession_type, concession_price, stock) VALUES
-                ('CN001', 'Popcorn', 'Regular', 'Snacks', 5.00, 150),
-                ('CN002', 'Popcorn', 'Large', 'Snacks', 9.00, 100),
-                ('CN004', 'Coke', 'Regular', 'Beverage', 3.00, 200),
-                ('CN010', 'Pizza', 'Regular', 'Fast Food', 8.00, 80),
-                ('CN013', 'Nachos', 'Regular', 'Snacks', 6.00, 90);
-                """
-            )
-
-        if table_count(conn, "orders") == 0:
-            now = datetime.now().isoformat()
-            order_cursor = conn.execute(
-                """
-                INSERT INTO orders (order_customer_id, order_total, order_discount, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                ("C001", 30.0, 0.0, now),
-            )
-            order_no = int(order_cursor.lastrowid)
-            conn.execute(
-                """
-                INSERT INTO tickets (ticket_customer_id, ticket_showing_id, ticket_order_number)
-                VALUES
-                ('C001', 1, ?),
-                ('C001', 1, ?)
-                """,
-                (order_no, order_no),
-            )
-            conn.execute(
-                "INSERT INTO order_concessions (order_number, concession_id, quantity) VALUES (?, ?, ?)",
-                (order_no, "CN001", 1),
-            )
-
-        if table_count(conn, "shifts") == 0:
-            conn.executescript(
-                """
-                INSERT INTO shifts (employee_id, showing_id, shift_start_datetime, shift_end_datetime, shift_department_id) VALUES
-                ('E01', 1, '2026-04-15T17:30:00', '2026-04-15T22:30:00', 1),
-                ('E03', 1, '2026-04-15T17:00:00', '2026-04-15T22:00:00', 4),
-                ('E06', 2, '2026-04-15T18:30:00', '2026-04-15T23:00:00', 2),
-                ('E02', NULL, '2026-04-15T16:00:00', '2026-04-15T21:00:00', 3);
-                """
-            )
-
-        conn.commit()
+def parse_customer_name(full: str) -> tuple[str, str]:
+    full = (full or "").strip()
+    if not full:
+        return "Guest", "Customer"
+    parts = full.split(None, 1)
+    if len(parts) == 1:
+        return parts[0], "Customer"
+    return parts[0], parts[1]
 
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", page="dashboard", title="Dashboard")
+
+
+@app.get("/order")
+def order_page():
+    return render_template("order.html", page="order", title="New order")
+
+
+@app.get("/customers")
+def customers_page():
+    return render_template("customers.html", page="customers", title="Customers")
+
+
+@app.get("/data")
+def data_page():
+    return render_template("explorer.html", page="data", title="Data explorer")
+
+
+@app.get("/receipt/<int:order_number>")
+def receipt_page(order_number: int):
+    with get_connection() as conn:
+        order = conn.execute(
+            """
+            SELECT o.*, c.firstname, c.lastname, c.email, c.rewards_member
+            FROM orders o
+            JOIN customers c ON c.customer_id = o.order_customer_id
+            WHERE o.order_number = ?
+            """,
+            (order_number,),
+        ).fetchone()
+        if order is None:
+            return render_template(
+                "receipt_not_found.html", order_number=order_number, page="", title="Receipt"
+            ), 404
+        ticket_rows = conn.execute(
+            """
+            SELECT t.ticket_showing_id, f.film_title, s.film_showing_datetime, COUNT(*) AS qty
+            FROM tickets t
+            JOIN showings s ON s.showing_id = t.ticket_showing_id
+            JOIN films f ON f.film_id = s.film_id
+            WHERE t.ticket_order_number = ?
+            GROUP BY t.ticket_showing_id, f.film_title, s.film_showing_datetime
+            """,
+            (order_number,),
+        ).fetchall()
+        con_rows = conn.execute(
+            """
+            SELECT oc.quantity, c.concession_name, c.concession_size, c.concession_price
+            FROM order_concessions oc
+            JOIN concessions c ON c.concession_id = oc.concession_id
+            WHERE oc.order_number = ?
+            """,
+            (order_number,),
+        ).fetchall()
+    customer_name = f"{order['firstname']} {order['lastname']}"
+    items: list[dict] = []
+    for tr in ticket_rows:
+        qty = int(tr["qty"])
+        unit = TICKET_UNIT_PRICE
+        items.append(
+            {
+                "label": f"Tickets — {tr['film_title']}",
+                "detail": tr["film_showing_datetime"],
+                "qty": qty,
+                "unit": unit,
+                "line": round(qty * unit, 2),
+            }
+        )
+    for cr in con_rows:
+        q = int(cr["quantity"])
+        p = float(cr["concession_price"])
+        line = round(q * p, 2)
+        label = f"{cr['concession_name']} ({cr['concession_size'] or '—'})"
+        items.append(
+            {
+                "label": label,
+                "detail": "Concession",
+                "qty": q,
+                "unit": p,
+                "line": line,
+            }
+        )
+    return render_template(
+        "receipt.html",
+        order=dict(order),
+        customer_name=customer_name,
+        customer_email=order["email"],
+        rewards_member=bool(order["rewards_member"]),
+        items=items,
+    )
 
 
 @app.get("/api/dashboard")
@@ -296,7 +215,7 @@ def dashboard_data():
                 (SELECT COUNT(*) FROM films) AS total_films,
                 (SELECT COUNT(*) FROM showings) AS active_showings,
                 (SELECT COUNT(*) FROM theatres WHERE status = 1) AS open_theatres,
-                COALESCE((SELECT ROUND(SUM(order_total - order_discount), 2) FROM orders), 0) AS total_revenue
+                COALESCE((SELECT ROUND(SUM(total), 2) FROM orders), 0) AS total_revenue
             """
         ).fetchone()
 
@@ -314,14 +233,16 @@ def dashboard_data():
             SELECT
                 o.order_number,
                 c.firstname || ' ' || c.lastname AS customer_name,
-                o.order_total,
-                o.order_discount,
+                o.total,
+                o.discount,
+                o.subtotal,
+                o.tax,
                 o.created_at,
                 COUNT(t.ticket_id) AS ticket_count
             FROM orders o
             JOIN customers c ON c.customer_id = o.order_customer_id
             LEFT JOIN tickets t ON t.ticket_order_number = o.order_number
-            GROUP BY o.order_number, customer_name, o.order_total, o.order_discount, o.created_at
+            GROUP BY o.order_number, customer_name, o.total, o.discount, o.subtotal, o.tax, o.created_at
             ORDER BY datetime(o.created_at) DESC
             LIMIT 12
             """
@@ -341,7 +262,7 @@ def admin_overview():
     with get_connection() as conn:
         customers = conn.execute(
             """
-            SELECT customer_id, firstname, lastname, email, pref_pymt_method, rewards_member
+            SELECT customer_id, firstname, lastname, email, phone, home_city, rewards_member, pref_pymt_method
             FROM customers
             ORDER BY customer_id
             """
@@ -395,7 +316,7 @@ def admin_overview():
         orders = conn.execute(
             """
             SELECT o.order_number, c.firstname || ' ' || c.lastname AS customer_name,
-                   o.order_total, o.order_discount, o.created_at
+                   o.subtotal, o.tax, o.discount, o.total, o.created_at
             FROM orders o
             JOIN customers c ON c.customer_id = o.order_customer_id
             ORDER BY datetime(o.created_at) DESC
@@ -416,7 +337,7 @@ def admin_overview():
 
         concessions = conn.execute(
             """
-            SELECT concession_id, concession_name, concession_size, concession_type, concession_price, stock
+            SELECT concession_id, concession_name, concession_size, concession_type, concession_price
             FROM concessions
             ORDER BY concession_name
             """
@@ -460,6 +381,51 @@ def admin_overview():
         )
 
 
+@app.get("/api/customers")
+def list_customers_api():
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT customer_id, firstname, lastname, email, rewards_member
+            FROM customers
+            ORDER BY firstname, lastname
+            """
+        ).fetchall()
+        return jsonify([dict(r) for r in rows])
+
+
+@app.post("/api/customers")
+def create_customer():
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "").strip()
+    first = (payload.get("firstName") or "").strip()
+    last = (payload.get("lastName") or "").strip()
+    if first or last:
+        firstname = first or "Guest"
+        lastname = last or "Customer"
+    else:
+        firstname, lastname = parse_customer_name(name)
+    email = (payload.get("email") or "").strip()
+    rewards = bool(payload.get("rewardsMember", False))
+    if not email:
+        return jsonify({"error": "Email is required."}), 400
+
+    with get_connection() as conn:
+        dupe = conn.execute("SELECT customer_id FROM customers WHERE lower(email) = lower(?)", (email,)).fetchone()
+        if dupe:
+            return jsonify({"error": "A customer with that email already exists.", "customerId": dupe["customer_id"]}), 409
+        new_id = next_customer_id(conn)
+        conn.execute(
+            """
+            INSERT INTO customers (customer_id, firstname, lastname, email, phone, age, gender, home_city, rewards_member, pref_pymt_method)
+            VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, NULL)
+            """,
+            (new_id, firstname, lastname, email, 1 if rewards else 0),
+        )
+        conn.commit()
+    return jsonify({"customerId": new_id, "firstname": firstname, "lastname": lastname, "email": email}), 201
+
+
 @app.get("/api/booking-data")
 def booking_data():
     with get_connection() as conn:
@@ -480,7 +446,7 @@ def booking_data():
         ).fetchall()
         concessions = conn.execute(
             """
-            SELECT concession_id, concession_name, concession_size, concession_price, stock
+            SELECT concession_id, concession_name, concession_size, concession_price
             FROM concessions
             ORDER BY concession_name, concession_size
             """
@@ -512,9 +478,13 @@ def create_order():
         return jsonify({"error": "Showing and ticket quantity are required."}), 400
 
     with get_connection() as conn:
-        customer = conn.execute("SELECT customer_id FROM customers WHERE customer_id = ?", (customer_id,)).fetchone()
+        customer = conn.execute(
+            "SELECT customer_id, rewards_member FROM customers WHERE customer_id = ?",
+            (customer_id,),
+        ).fetchone()
         if customer is None:
             return jsonify({"error": "Customer not found."}), 404
+        is_rewards = int(customer["rewards_member"] or 0) == 1
 
         showing = conn.execute(
             "SELECT showing_id, film_available_seats FROM showings WHERE showing_id = ?",
@@ -525,11 +495,12 @@ def create_order():
         if showing["film_available_seats"] < ticket_qty:
             return jsonify({"error": "Not enough seats available for this showing."}), 400
 
-        concession_total = 0.0
-        cleaned_concessions: list[tuple[str, int, float]] = []
+        ticket_line = ticket_qty * TICKET_UNIT_PRICE
+        concession_subtotal = 0.0
+        cleaned: list[tuple[str, int, float]] = []
         for item in concessions_payload:
-            concession_id = item.get("id")
-            if not concession_id:
+            cid = item.get("id")
+            if not cid:
                 continue
             try:
                 qty = int(item.get("qty", 0))
@@ -537,30 +508,26 @@ def create_order():
                 continue
             if qty <= 0:
                 continue
-            concession = conn.execute(
-                "SELECT concession_price, stock FROM concessions WHERE concession_id = ?",
-                (concession_id,),
-            ).fetchone()
-            if concession is None:
+            rowc = conn.execute("SELECT concession_price FROM concessions WHERE concession_id = ?", (cid,)).fetchone()
+            if rowc is None:
                 continue
-            if concession["stock"] < qty:
-                return jsonify({"error": f"Not enough stock for concession {concession_id}."}), 400
-            price = float(concession["concession_price"])
-            concession_total += price * qty
-            cleaned_concessions.append((concession_id, qty, price))
+            price = float(rowc["concession_price"])
+            concession_subtotal += price * qty
+            cleaned.append((cid, qty, price))
 
-        ticket_total = ticket_qty * TICKET_PRICE
-        order_total = round(ticket_total + concession_total, 2)
+        subtotal = round(ticket_line + concession_subtotal, 2)
+        discount = round(subtotal * REWARDS_DISCOUNT_RATE, 2) if is_rewards else 0.0
+        tax, total = compute_order_totals(subtotal, discount)
         now = datetime.now().isoformat()
 
-        cursor = conn.execute(
+        cur = conn.execute(
             """
-            INSERT INTO orders (order_customer_id, order_total, order_discount, created_at)
-            VALUES (?, ?, 0, ?)
+            INSERT INTO orders (order_customer_id, subtotal, tax, discount, total, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (customer_id, order_total, now),
+            (customer_id, subtotal, tax, discount, total, now),
         )
-        order_number = int(cursor.lastrowid)
+        order_number = int(cur.lastrowid)
 
         conn.executemany(
             """
@@ -569,30 +536,35 @@ def create_order():
             """,
             [(customer_id, showing_id, order_number) for _ in range(ticket_qty)],
         )
-        for concession_id, qty, _ in cleaned_concessions:
+        for cid, qty, _ in cleaned:
             conn.execute(
                 """
                 INSERT INTO order_concessions (order_number, concession_id, quantity)
                 VALUES (?, ?, ?)
                 """,
-                (order_number, concession_id, qty),
+                (order_number, cid, qty),
             )
-            conn.execute(
-                "UPDATE concessions SET stock = stock - ? WHERE concession_id = ?",
-                (qty, concession_id),
-            )
-
         conn.execute(
-            """
-            UPDATE showings
-            SET film_available_seats = film_available_seats - ?
-            WHERE showing_id = ?
-            """,
+            "UPDATE showings SET film_available_seats = film_available_seats - ? WHERE showing_id = ?",
             (ticket_qty, showing_id),
         )
         conn.commit()
 
-    return jsonify({"orderNumber": order_number, "orderTotal": order_total}), 201
+    receipt_path = f"/receipt/{order_number}"
+    return (
+        jsonify(
+            {
+                "orderNumber": order_number,
+                "subtotal": subtotal,
+                "tax": tax,
+                "discount": discount,
+                "total": total,
+                "rewardsDiscountApplied": is_rewards,
+                "receiptUrl": receipt_path,
+            }
+        ),
+        201,
+    )
 
 
 if __name__ == "__main__":

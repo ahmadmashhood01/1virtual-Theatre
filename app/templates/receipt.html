@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Receipt #{{ order["order_number"] }} | CineFlow</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='receipt.css') }}" />
+  </head>
+  <body class="receipt-body">
+    <div class="receipt-sheet">
+      <p class="receipt-brand">CineFlow Theatres</p>
+      <h1>Order receipt</h1>
+      <p class="meta">Order #<strong>{{ order["order_number"] }}</strong> · {{ order["created_at"] }}</p>
+      <p class="meta">{{ customer_name }} · {{ customer_email }}{% if rewards_member %} · <span class="rewards">Rewards member</span>{% endif %}</p>
+
+      <table class="lines">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>Line</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+          <tr>
+            <td>
+              <div class="line-title">{{ it.label }}</div>
+              {% if it.detail %}<div class="line-detail">{{ it.detail }}</div>{% endif %}
+            </td>
+            <td>{{ it.qty }}</td>
+            <td>${{ "%.2f" % it.unit }}</td>
+            <td>${{ "%.2f" % it.line }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="totals">
+        <p><span>Subtotal</span><span>${{ "%.2f" % order["subtotal"] }}</span></p>
+        <p><span>Tax (8%)</span><span>${{ "%.2f" % order["tax"] }}</span></p>
+        <p><span>Discounts</span><span>−${{ "%.2f" % order["discount"] }}</span></p>
+        <p class="grand"><span>Total</span><span>${{ "%.2f" % order["total"] }}</span></p>
+      </div>
+
+      <p class="thanks">Thank you for visiting CineFlow Theatres.</p>
+      <a class="back" href="{{ url_for('order_page') }}">← New order</a>
+    </div>
+  </body>
+</html>

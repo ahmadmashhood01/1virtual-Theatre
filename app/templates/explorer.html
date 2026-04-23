@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+      <section class="hero card">
+        <div>
+          <p class="eyebrow">Back office</p>
+          <h1>Management data explorer</h1>
+          <p>Inspect the same data model as the final SQL script: customers, showings, orders, shifts, and more.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-title-row">
+          <h3>Data sets</h3>
+          <span class="badge">Read-only</span>
+        </div>
+        <p class="section-subtitle">Select a table or aggregate view.</p>
+        <label>
+          Data set
+          <select id="datasetSelect">
+            <option value="customers">Customers</option>
+            <option value="employees">Employees</option>
+            <option value="shifts">Shifts</option>
+            <option value="films">Films</option>
+            <option value="theatres">Theatres</option>
+            <option value="showings">Showings</option>
+            <option value="orders">Orders</option>
+            <option value="tickets">Tickets</option>
+            <option value="concessions">Concessions</option>
+            <option value="topFilms">Top films (tickets sold)</option>
+            <option value="concessionSales">Concession sales (units)</option>
+          </select>
+        </label>
+        <div class="table-wrap table-scroll">
+          <table>
+            <thead id="datasetHead"></thead>
+            <tbody id="datasetBody"></tbody>
+          </table>
+        </div>
+        <p id="datasetFeedback" class="feedback"></p>
+      </section>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='explorer.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}{{ title | default("CineFlow") }}{% endblock %} | CineFlow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    {% block head_extra %}{% endblock %}
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar card">
+        <div class="brand">
+          <a href="{{ url_for('index') }}" class="brand-link"><span class="brand-mark">CF</span></a>
+          <div>
+            <h2>CineFlow Admin Suite</h2>
+            <p>Operations &amp; sales</p>
+          </div>
+        </div>
+        <nav class="main-nav" aria-label="Primary">
+          <a href="{{ url_for('index') }}" class="nav-link{% if page == 'dashboard' %} is-active{% endif %}">Dashboard</a>
+          <a href="{{ url_for('order_page') }}" class="nav-link{% if page == 'order' %} is-active{% endif %}">New order</a>
+          <a href="{{ url_for('customers_page') }}" class="nav-link{% if page == 'customers' %} is-active{% endif %}">Customers</a>
+          <a href="{{ url_for('data_page') }}" class="nav-link{% if page == 'data' %} is-active{% endif %}">Data explorer</a>
+        </nav>
+        <div class="topbar-status">
+          <span class="status-dot"></span>
+          <span>Database connected</span>
+        </div>
+      </header>
+      <main class="layout">{% block content %}{% endblock %}</main>
+    </div>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

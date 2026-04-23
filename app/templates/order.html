@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+      <section class="hero card">
+        <div>
+          <p class="eyebrow">Point of sale</p>
+          <h1>New ticket order</h1>
+          <p>Rewards members save <strong>10% off</strong> the pre-tax subtotal. Tax is 8% on subtotal. Receipt opens after purchase.</p>
+        </div>
+        <a href="{{ url_for('customers_page') }}" class="badge badge-link">Manage customers</a>
+      </section>
+
+      <section class="content-grid">
+        <article class="card">
+          <h3>Quick add customer</h3>
+          <p class="section-subtitle">Creates a new profile and appears in the list below.</p>
+          <form id="quickCustomerForm" class="inline-grid">
+            <label>
+              Full name
+              <input id="qcName" type="text" required placeholder="Jane Smith" />
+            </label>
+            <label>
+              Email
+              <input id="qcEmail" type="email" required placeholder="jane@email.com" />
+            </label>
+            <label class="checkbox-label">
+              <input id="qcRewards" type="checkbox" />
+              Rewards member
+            </label>
+            <button type="submit" class="btn-secondary">Add customer</button>
+            <p id="qcFeedback" class="feedback"></p>
+          </form>
+        </article>
+
+        <article class="card">
+          <h3>Create order</h3>
+          <form id="orderForm">
+            <label>
+              Customer
+              <select id="customerSelect" required></select>
+            </label>
+            <label>
+              Showing
+              <select id="showingSelect" required></select>
+            </label>
+            <label>
+              Ticket quantity
+              <input id="ticketQtyInput" type="number" min="1" max="12" value="1" required />
+            </label>
+            <fieldset>
+              <legend>Concessions (optional)</legend>
+              <div id="concessionsContainer" class="concession-list"></div>
+            </fieldset>
+            <button type="submit">Complete sale</button>
+            <p id="formFeedback" class="feedback"></p>
+          </form>
+        </article>
+      </section>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='order.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,119 @@
+* {
+  box-sizing: border-box;
+}
+
+body.receipt-body {
+  margin: 0;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #0f172a;
+  color: #0f172a;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.receipt-sheet {
+  max-width: 420px;
+  width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.receipt-brand {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 0 0 0.5rem;
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.35rem;
+}
+
+.meta {
+  font-size: 0.88rem;
+  color: #475569;
+  margin: 0.25rem 0;
+}
+
+.rewards {
+  color: #c2410c;
+  font-weight: 600;
+}
+
+table.lines {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.88rem;
+}
+
+table.lines th,
+table.lines td {
+  text-align: left;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+table.lines th {
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.line-title {
+  font-weight: 600;
+}
+.line-detail {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.totals p {
+  display: flex;
+  justify-content: space-between;
+  margin: 0.35rem 0;
+  font-size: 0.92rem;
+}
+.totals .grand {
+  font-weight: 800;
+  font-size: 1.05rem;
+  border-top: 2px solid #0f172a;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.thanks {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.86rem;
+  margin: 1.25rem 0 0.75rem;
+}
+
+a.back {
+  display: block;
+  text-align: center;
+  color: #0ea5e9;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+@media print {
+  body.receipt-body {
+    background: #fff;
+    padding: 0;
+  }
+  .receipt-sheet {
+    box-shadow: none;
+  }
+  a.back {
+    display: none;
+  }
+}

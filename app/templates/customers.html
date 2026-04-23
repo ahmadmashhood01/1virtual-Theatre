@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+      <section class="hero card">
+        <div>
+          <p class="eyebrow">Guest services</p>
+          <h1>Customers</h1>
+          <p>Add new moviegoers for faster checkout. Rewards members receive 10% off the pre-tax subtotal on new orders.</p>
+        </div>
+      </section>
+
+      <section class="content-grid one-col-tight">
+        <article class="card">
+          <h3>Quick add customer</h3>
+          <form id="customerForm">
+            <label>
+              Full name
+              <input id="cName" type="text" required placeholder="Full name" />
+            </label>
+            <label>
+              Email
+              <input id="cEmail" type="email" required />
+            </label>
+            <label class="checkbox-label">
+              <input id="cRewards" type="checkbox" />
+              Rewards member
+            </label>
+            <button type="submit">Save customer</button>
+            <p id="cFeedback" class="feedback"></p>
+          </form>
+        </article>
+
+        <article class="card">
+          <div class="section-title-row">
+            <h3>All customers</h3>
+            <span class="badge" id="customerCount">0</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Rewards</th>
+                </tr>
+              </thead>
+              <tbody id="customersBody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='customers.js') }}"></script>
+{% endblock %}
